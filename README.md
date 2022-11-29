@@ -1,7 +1,8 @@
-# GED-TFG
-Treball de Fi de Grau
+# Treball de Fi de Grau (TFG)
 ---
 
+## Predictions
+[TextVQA predictions](https://github.com/arcb01/GED-TFG/blob/main/outputs/textvqa_run_test_2022-11-29T22:04:30.json)
 
 ## Adding a dataset
 [OUTDATED tutorial](https://mmf.sh/docs/tutorials/dataset)
