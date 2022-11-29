@@ -12,3 +12,7 @@
 2- [/mmf_bert/configs/vizwiz/defaults.yaml](https://github.com/facebookresearch/mmf/blob/main/projects/others/mmf_bert/configs/vizwiz/defaults.yaml)
 
 3- [FEATURES /vizwiz/defaults.yaml](https://github.com/facebookresearch/mmf/blob/main/mmf/configs/datasets/vizwiz/defaults.yaml)
+
+### Links
+[**MMF doc**](https://mmf.sh/docs/projects/m4c/)
+[**NNF repo**](https://github.com/facebookresearch/mmf)
