@@ -14,7 +14,7 @@ Vaig optar per mirar com era el fitxer de configuració del dataset del TextVQA 
 - En [aquest fitxer](https://github.com/facebookresearch/mmf/blob/main/mmf/configs/datasets/vizwiz/defaults.yaml) estan els features de vizwiz pero son d'una versió antiga de 2019. La idea seria que primer conseguís que funcionés amb aquest i ja després mira a veure si es podria actualitzat a la ultima versió de 2021.
 
 ## Feina futura
-He conseguit obrir un VSCode dins del container de Docker. Llavrs, tenia pensat intentar debugar i entendre el codi i veure si d'aquesta manera puc adaptar el dataset de VizWiz. Tampoc se quan de temps hem portaria això. 
+He aconseguit obrir un VSCode dins del container de Docker. Llavrs, tenia pensat intentar debugar i entendre el codi i veure si d'aquesta manera puc adaptar el dataset de VizWiz. Tampoc sé quant de temps hem portaria això. 
 
 
 ### Resources
