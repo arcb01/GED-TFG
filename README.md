@@ -13,7 +13,7 @@
 
 3- [FEATURES /vizwiz/defaults.yaml](https://github.com/facebookresearch/mmf/blob/main/mmf/configs/datasets/vizwiz/defaults.yaml)
 
-### Links
+### Resources
 ---
 [**MMF doc**](https://mmf.sh/docs/projects/m4c/)
 
