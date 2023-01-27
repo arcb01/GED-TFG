@@ -1,6 +1,7 @@
 # Treball de Fi de Grau (TFG)
 ---
 [**MMF alternative?**](https://paperswithcode.com/paper/image-as-a-foreign-language-beit-pretraining)
+
 [**Article Google**](https://ai.googleblog.com/2022/09/a-multi-axis-approach-for-vision.html)
 
 ### Resources
