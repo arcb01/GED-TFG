@@ -1,6 +1,6 @@
 # Treball de Fi de Grau (TFG)
 ---
-### Resources
+## Resources
 
 [**MMF alternative?**](https://paperswithcode.com/paper/image-as-a-foreign-language-beit-pretraining)
 
