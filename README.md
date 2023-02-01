@@ -1,5 +1,6 @@
 # Treball de Fi de Grau (TFG)
 ---
+**Status**: In progress
 ## Resources
 
 [**MMF alternative?**](https://paperswithcode.com/paper/image-as-a-foreign-language-beit-pretraining)  
