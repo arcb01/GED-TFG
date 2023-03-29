@@ -1,0 +1,2 @@
+Best Parameters: {'lr': 6.750277604651747e-05, 'weight_decay': 8.675143843171858e-09, 'batch_size': 64}
+Best Objective Value: 0.3308060294105893
