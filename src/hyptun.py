@@ -101,9 +101,10 @@ with open('../data/vw_blur_dataset.json', encoding='UTF-8') as m_json_file:
 def initialize_model(num_classes):
     # vgg16
     #model = models.vgg16(pretrained=True)
-    model = models.convnext_tiny(pretrained=True)
-    
-    model.fc = nn.Linear(512, num_classes)# YOUR CODE HERE!
+    model = models.convnext_tiny(weights='IMAGENET1K_V1')
+    num_ftrs = model.classifier[-1].in_features
+    model.classifier[-1] = nn.Linear(num_ftrs, num_classes)
+    #model.fc = nn.Linear(512, num_classes)# YOUR CODE HERE!
     
     input_size = 224
         
@@ -111,7 +112,7 @@ def initialize_model(num_classes):
 
 
 # Number of classes in the dataset
-num_classes = 2
+num_classes = 1
 
 # Initialize the model
 model, input_size = initialize_model(num_classes)
@@ -125,8 +126,7 @@ print(model)
 model = model.to(device)
 
 # Setup the loss fxn
-criterion = nn.CrossEntropyLoss()
-
+criterion = nn.BCEWithLogitsLoss()
 
 
 train_dataset = BlurDataset('/media/arnau/PEN/TFG/train/', m_train_data, data_transforms["train"])
@@ -143,6 +143,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
+from sklearn.metrics import f1_score
 from torchvision import datasets
 from torchvision import transforms
 from sqlalchemy import create_engine
@@ -154,7 +155,8 @@ EPOCHS = 10
 
 def objective(trial):
     # Generate the model.
-    model = models.convnext_tiny(pretrained=True).to(device)
+    model, input_size = initialize_model(num_classes)
+    model = model.to(device)
 
     lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
     batch_size = 128
@@ -180,7 +182,7 @@ def objective(trial):
 
             optimizer.zero_grad()
             output = model(data)
-            loss = criterion(output, target)
+            loss = criterion(output.float(), target.unsqueeze(1).float())
             loss.backward()
             optimizer.step()
         scheduler.step()
@@ -193,7 +195,7 @@ def objective(trial):
             for batch_idx, (data, target) in enumerate(val_loader):
                 data, target = data.to(device), target.to(device)
                 output = model(data)
-                loss = criterion(output, target)
+                loss = criterion(output.float(), target.unsqueeze(1).float())
                 # Get the index of the max log-probability.
                 pred = output.argmax(dim=1, keepdim=True)
                 correct += pred.eq(target.view_as(pred)).sum().item()
@@ -210,8 +212,9 @@ def objective(trial):
 
 study = optuna.create_study(direction="minimize", 
                             storage="sqlite:///blur_model.db",  # Specify the storage URL here.
-                            study_name="blur-overnight2"
-                            ) 
+                            study_name="blur-bce-overnight",
+                            sampler=optuna.samplers.RandomSampler(),
+                            pruner=optuna.pruners.MedianPruner())
     
 study.optimize(objective, n_trials=100)
 
