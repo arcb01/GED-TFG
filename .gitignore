@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 /data/
 tfg/
-outputs/best.pth
+outputs/
