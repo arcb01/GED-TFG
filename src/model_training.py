@@ -70,15 +70,16 @@ def train_model(model, dataloaders, loss_fn, optimizer, num_epochs, save_path):
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     # Get model outputs and calculate loss
-                    outputs = model(inputs)
+                    output = model(inputs)
 
                     if not multiclass:
-                        labels = labels.unsqueeze(1)
-                        labels = labels.float()
+                        output = output.float()
+                        labels = labels.unsqueeze(1).float()
 
-                    loss = loss_fn(outputs.float(), labels)
+                    loss = loss_fn(output, labels)
                     losses[phase].append(loss.cpu().detach().numpy())
-                    preds = torch.argmax(outputs, 1)
+                    # Get the index of the max log-probability.
+                    preds = torch.argmax(output, 1) # 
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -87,7 +88,12 @@ def train_model(model, dataloaders, loss_fn, optimizer, num_epochs, save_path):
 
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+
+                if not multiclass:
+                    preds = torch.round(torch.sigmoid(output))
+                    #labels = labels.data.unsqueeze(1)
+
+                running_corrects += torch.sum(preds == labels)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
@@ -120,25 +126,28 @@ if __name__ == "__main__":
     print(device)
 
     # Load model data
-    file = f'./data/vw_MC_dataset.json'
+    file = f'./data/vw_FRM_dataset.json'
     multiclass = True if "mc" in file.lower() else False
-
-    if multiclass:
-        train_dir = '/media/arnau/SSD/VizWiz/models/multiclass/train/'
-        val_dir = '/media/arnau/SSD/VizWiz/models/multiclass/val/'
-        loss_fn = nn.CrossEntropyLoss()
-        typ = "MC"
-    else:
-        train_dir = '/media/arnau/SSD/VizWiz/data/captioning/train/'
-        val_dir = '/media/arnau/SSD/VizWiz/data/captioning/val/'
-        loss_fn = nn.BCEWithLogitsLoss()
-        typ = str(file.split("_")[1])
+    flaw = file.split("_")[1]
 
     with open(file, encoding='UTF-8') as m_json_file:
         data = json.load(m_json_file)
         mc_train_data = np.array(data["train"], dtype=object)
         mc_val_data = np.array(data["val"], dtype=object)
         mc_test_data = np.array(data["test"], dtype=object)
+
+    if multiclass:
+        train_dir = '/media/arnau/SSD/VizWiz/models/multiclass/train/'
+        val_dir = '/media/arnau/SSD/VizWiz/models/multiclass/val/'
+        class_weights = calculate_ce_weights(np.array(mc_train_data, dtype=object))
+        class_weights = torch.FloatTensor(class_weights).cuda()
+        loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+        typ = "MC"
+    else:
+        train_dir = '/media/arnau/SSD/VizWiz/data/captioning/train/'
+        val_dir = '/media/arnau/SSD/VizWiz/data/captioning/val/'
+        loss_fn = nn.BCEWithLogitsLoss()
+        typ = str(file.split("_")[1])
 
     # Number of classes in the dataset
     num_classes = len(mc_train_data[:, 1::][0])
@@ -151,20 +160,22 @@ if __name__ == "__main__":
     model = model.to(device)
 
     # Model parameters
-    hp = {"lr" : 6.78263197e-05,
+    hp = {"lr" : 7.803848286745978e-05,
         "batch_size" : 128,
-        "num_epochs" : 3}
-    
+        "num_epochs" : 8}
+
     batch_size = hp["batch_size"]
     num_epochs = hp["num_epochs"]
     lr = hp["lr"]
-    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    #optimizer = optim.AdamW(model.parameters(), lr=lr)
+    # rmsprop optimizer
+    optimizer = optim.RMSprop(model.parameters(), lr=lr, weight_decay=3.067449309133902e-05)
 
-    norm_path = f'./outputs/norms_MC.pkl'
+    norm_path = f'./outputs/norms_{flaw}.pkl'
     input_size = (224,224)
 
     data_transforms = get_transforms(norm_path, input_size, train_dir, 
-                                     mc_train_data, multiclass=multiclass)
+                                     mc_train_data, multiclass=multiclass, typ=flaw)
 
     # Balance data giving corresponding weights to each class
     train_dataset = ImageDataset(train_dir, mc_train_data, data_transforms["train"], multiclass=multiclass)
@@ -172,16 +183,16 @@ if __name__ == "__main__":
 
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, 
-                            num_workers=0, pin_memory=True,
-                            sampler=ImbalancedDatasetSampler(train_dataset))
+                            num_workers=0, pin_memory=True)
+                            #sampler=ImbalancedDatasetSampler(train_dataset))
 
     val_loader = DataLoader(val_dataset, batch_size=batch_size,
-                            num_workers=0, pin_memory=True,
-                            sampler=ImbalancedDatasetSampler(val_dataset))
+                            num_workers=0, pin_memory=True)
+                            #sampler=ImbalancedDatasetSampler(val_dataset))
 
     dataloaders_dict = {"train": train_loader, "val": val_loader}
 
-    save_path = f'./outputs/best_{typ}_{model_name}.pth'
+    save_path = f'./outputs/best_{typ}_{model_name}_test.pth'
 
     if not os.path.exists(save_path):
         # Train and evaluate

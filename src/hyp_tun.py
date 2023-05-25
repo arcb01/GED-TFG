@@ -7,6 +7,8 @@ import torch.optim as optim
 import numpy as np
 import torchvision
 import secrets, hashlib
+from time import time
+from collections import Counter
 from torchvision import datasets, models, transforms
 from torch.utils.data import Dataset, DataLoader
 import json
@@ -51,10 +53,10 @@ def objective(trial):
 
     # Load data
     # Path to the file with the normalization values
-    norm_path = f'./outputs/norms_MC.pkl'
+    norm_path = f'./outputs/norms_{flaw}.pkl'
     input_size = (224,224)
     # Get dict with data transforms
-    data_transforms = get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass=multiclass)
+    data_transforms = get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass=multiclass, typ=flaw)
     # Balance data giving corresponding weights to each class
     train_dataset = ImageDataset(train_dir, mc_train_data, data_transforms["train"], 
                                  multiclass=multiclass)
@@ -62,16 +64,17 @@ def objective(trial):
                                multiclass=multiclass)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, 
-                          num_workers=0, pin_memory=True,
-                          sampler=ImbalancedDatasetSampler(train_dataset))
+                          num_workers=14, pin_memory=True)
+                          #sampler=ImbalancedDatasetSampler(train_dataset))
     val_loader = DataLoader(val_dataset, batch_size=batch_size,
-                            num_workers=0, pin_memory=True,
-                            sampler=ImbalancedDatasetSampler(val_dataset))
+                            num_workers=14, pin_memory=True)
+                            #sampler=ImbalancedDatasetSampler(val_dataset))
 
     if optimizer_name == 'AdamW':
         optimizer = optim.AdamW(model.parameters(), lr=lr)
     else:
         optimizer = optim.RMSprop(model.parameters(), lr=lr, weight_decay=wd)
+
 
     # Training of the model.
     for epoch in range(EPOCHS):
@@ -84,17 +87,16 @@ def objective(trial):
             output = model(data)
 
             if not multiclass:
-                target = target.unsqueeze(1)
-                target = target.float()
+                output = output.float()
+                target = target.unsqueeze(1).float()
 
-            loss = loss_fn(output.float(), target)
+            loss = loss_fn(output, target)
 
             loss.backward()
             optimizer.step()
 
         # Validation of the model.
         model.eval()
-        correct = 0
         val_loss = 0
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(val_loader):
@@ -102,13 +104,11 @@ def objective(trial):
                 output = model(data)
 
                 if not multiclass:
-                    target = target.unsqueeze(1)
-                    target = target.float()
+                    output = output.float()
+                    target = target.unsqueeze(1).float()
 
-                loss = loss_fn(output.float(), target)
-                # Get the index of the max log-probability.
-                pred = output.argmax(dim=1, keepdim=True)
-                correct += torch.sum(pred == target.data)
+                loss = loss_fn(output, target)
+                
                 val_loss += loss.item()
 
         trial.report(val_loss, epoch)
@@ -120,60 +120,66 @@ def objective(trial):
     return val_loss
 
 
-#if __name__ == "__main__":
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(device)
+if __name__ == "__main__":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
 
-# Load datas
-file = f'./data/vw_MC_dataset.json'
-multiclass = True if "mc" in file.lower() else False
+    # Load datas
+    file = f'./data/vw_FRM_dataset.json'
+    multiclass = True if "mc" in file.lower() else False
+    flaw = file.split("_")[1]
 
-if multiclass:
-    train_dir = '/media/arnau/SSD/VizWiz/models/multiclass/train/'
-    val_dir = '/media/arnau/SSD/VizWiz/models/multiclass/val/'
-    loss_fn = nn.CrossEntropyLoss()
-else:
-    train_dir = '/media/arnau/SSD/VizWiz/data/captioning/train/'
-    val_dir = '/media/arnau/SSD/VizWiz/data/captioning/val/'
-    loss_fn = nn.BCEWithLogitsLoss()
+    with open(file, encoding='UTF-8') as m_json_file:
+        data = json.load(m_json_file)
+        mc_train_data = np.array(data["train"], dtype=object)
+        mc_val_data = np.array(data["val"], dtype=object)
+        mc_test_data = np.array(data["test"], dtype=object)
 
-with open(file, encoding='UTF-8') as m_json_file:
-    data = json.load(m_json_file)
-    mc_train_data = np.array(data["train"], dtype=object)
-    mc_val_data = np.array(data["val"], dtype=object)
-    mc_test_data = np.array(data["test"], dtype=object)
-
-# Number of classes in the dataset
-num_classes = len(mc_train_data[:, 1::][0])
-
-# Replace the database_name with the name of your SQLite database file
-engine = create_engine('sqlite:///blur_model.db', echo=True)
-
-# Create a studysss
-h = hashlib.sha256(secrets.token_bytes(16)).hexdigest()[:5]
-
-study = optuna.create_study(direction="minimize", 
-                            storage="sqlite:///fsrm_model.db",  # Specify the storage URL here.
-                            study_name=f"model-{h}",
-                            sampler=optuna.samplers.TPESampler(),
-                            pruner=optuna.pruners.HyperbandPruner())
+    class_weights = calculate_ce_weights(np.array(mc_train_data, dtype=object))
+    class_weights = torch.FloatTensor(class_weights).cuda()
     
-study.optimize(objective, n_trials=100)
+    if multiclass:
+        train_dir = '/media/arnau/SSD/VizWiz/models/multiclass/train/'
+        val_dir = '/media/arnau/SSD/VizWiz/models/multiclass/val/'
+        # Weighted loss function
+        loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        train_dir = '/media/arnau/SSD/VizWiz/data/captioning/train/'
+        val_dir = '/media/arnau/SSD/VizWiz/data/captioning/val/'
+        # Weighted loss function
+        loss_fn = nn.BCEWithLogitsLoss(weight=class_weights)
 
-pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    # Number of classes in the dataset
+    num_classes = len(mc_train_data[:, 1::][0])
 
-print("Study statistics: ")
-print("  Number of finished trials: ", len(study.trials))
-print("  Number of pruned trials: ", len(pruned_trials))
-print("  Number of complete trials: ", len(complete_trials))
+    # Replace the database_name with the name of your SQLite database file
+    engine = create_engine('sqlite:///blur_model.db', echo=True)
 
-print("Best trial:")
-trial = study.best_trial
+    # Create a studysss
+    h = hashlib.sha256(secrets.token_bytes(16)).hexdigest()[:5]
 
-print("  Value: ", trial.value)
+    study = optuna.create_study(direction="minimize", 
+                                storage="sqlite:///fsrm_model.db",  # Specify the storage URL here.
+                                study_name=f"model-{h}",
+                                sampler=optuna.samplers.TPESampler(),
+                                pruner=optuna.pruners.HyperbandPruner())
+        
+    study.optimize(objective, n_trials=50)
 
-print("  Params: ")
-for key, value in trial.params.items():
-    print("    {}: {}".format(key, value))
+    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+    print("Study statistics: ")
+    print("  Number of finished trials: ", len(study.trials))
+    print("  Number of pruned trials: ", len(pruned_trials))
+    print("  Number of complete trials: ", len(complete_trials))
+
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("  Value: ", trial.value)
+
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
 

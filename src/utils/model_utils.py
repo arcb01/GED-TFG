@@ -32,7 +32,7 @@ class ImageDataset(Dataset):
         if self.multiclass:
             return np.where(self.imgs_list[:, 1::] == 1)[1]
         else:
-            return self.imgs_list[:, 1].astype('int64')
+            return self.imgs_list[:, 1].astype('int32')
 
     def __len__(self):
         return len(self.imgs_list)
@@ -43,17 +43,18 @@ class ImageDataset(Dataset):
 
         img_name = os.path.join(self.root_dir, self.imgs_list[idx][0])
     
+        labels = self.imgs_list[idx][1::]
+
         if self.multiclass:
-            labels = self.imgs_list[idx][1::] # [x, y, z]  
             label = int(np.where(labels == 1)[0][0]) # idx
         else:
-            label = self.imgs_list[idx][1]
+            label = float(labels[0])
 
         image = Image.open(img_name)
 
         if self.transform:
             image = self.transform(image)
-        
+
         return image, label
                 
 
@@ -105,7 +106,7 @@ def get_transform_normalize_values(loader):
     return mean, std
 
 
-def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass):
+def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass, typ=None):
     """
     Get the data transforms
     :param norm_path: path to the normalization values
@@ -113,6 +114,7 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass):
     :param train_dir: path to the training images folder
     :param mc_train_data: training data
     :param multiclass: whether the dataset is multiclass or not
+    :param typ: type of data augmentation
     """
 
     if not os.path.exists(norm_path):
@@ -125,7 +127,7 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass):
         train_loader = DataLoader(train_dataset, batch_size=25, num_workers=0,
                             shuffle=True)
 
-        train_mean, train_std = get_transform_normalize_values(trnfsm, train_loader)
+        train_mean, train_std = get_transform_normalize_values(train_loader)
 
         train_normalize = transforms.Normalize(mean=train_mean, std=train_std)
 
@@ -137,12 +139,16 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass):
             train_normalize = pickle.load(f)
         
     # Set transformations
-    return {
+    if typ == "FRM":
+        return {
         'train': transforms.Compose([
             transforms.Resize(input_size),
             transforms.RandomCrop((int(input_size[0] * 0.5), 
                                 int(input_size[1] * 0.5))),
-            transforms.GaussianBlur(kernel_size=9, sigma=(0.1, 2.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomAutocontrast(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomRotation(90),
             transforms.ToTensor(),
             train_normalize
 
@@ -153,3 +159,59 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass):
             train_normalize
         ])
     }
+    elif typ == "BLR":
+        return {
+            'train': transforms.Compose([
+                transforms.Resize(input_size),
+                transforms.GaussianBlur(13, sigma=(2.0, 6.0)),
+                transforms.RandomAutocontrast(),
+                transforms.ToTensor(),
+                train_normalize
+            ]),
+            'val': transforms.Compose([
+                transforms.Resize(input_size),
+                transforms.ToTensor(),
+                train_normalize
+            ])
+        }
+    elif typ == "MC":
+        return {
+            'train': transforms.Compose([
+                    transforms.Resize(input_size),
+                    transforms.RandomCrop((int(input_size[0] * 0.5), 
+                                        int(input_size[1] * 0.5))),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomVerticalFlip(),
+                    transforms.RandomRotation(90),
+                    transforms.RandomAutocontrast(),
+                    transforms.GaussianBlur(13, sigma=(2.0, 6.0)),
+                    transforms.ToTensor(),
+                    train_normalize
+            ]),
+            'val': transforms.Compose([
+                transforms.Resize(input_size),
+                transforms.ToTensor(),
+                train_normalize
+            ])
+        }
+
+
+def calculate_ce_weights(data):
+    """
+    Calculate the class weights for each class in the dataset. 
+    These weights are used to balance the loss function.
+    :param data: training data
+    """
+    
+    class_samples = []
+    n_classes = len(data[:, 1::][0])
+    
+    for c in range(1, n_classes + 1):
+        n_samples_c = data[np.where(data[:, c] == 1)].shape[0]
+        class_samples.append(n_samples_c)
+
+    total_train_samples = sum(class_samples)
+    class_weights = [total_train_samples / (len(class_samples) * samples) for samples in class_samples]
+    class_weights = torch.FloatTensor(class_weights)
+    
+    return class_weights
