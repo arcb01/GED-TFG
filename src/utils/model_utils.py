@@ -147,7 +147,6 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass, 
                                 int(input_size[1] * 0.5))),
             transforms.RandomHorizontalFlip(),
             transforms.RandomAutocontrast(),
-            transforms.RandomVerticalFlip(),
             transforms.RandomRotation(90),
             transforms.ToTensor(),
             train_normalize
@@ -163,7 +162,7 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass, 
         return {
             'train': transforms.Compose([
                 transforms.Resize(input_size),
-                transforms.GaussianBlur(13, sigma=(2.0, 6.0)),
+                transforms.GaussianBlur(kernel_size=(19, 23), sigma=(20, 25)),
                 transforms.RandomAutocontrast(),
                 transforms.ToTensor(),
                 train_normalize
@@ -178,13 +177,11 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass, 
         return {
             'train': transforms.Compose([
                     transforms.Resize(input_size),
-                    transforms.RandomCrop((int(input_size[0] * 0.5), 
-                                        int(input_size[1] * 0.5))),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomVerticalFlip(),
-                    transforms.RandomRotation(90),
+                    transforms.RandomRotation(180),
+                    transforms.RandomCrop((int(input_size[0] * 0.5),
+                                            int(input_size[1] * 0.5))),
+                    transforms.GaussianBlur(kernel_size=(23, 25), sigma=(4.0, 8.0)),
                     transforms.RandomAutocontrast(),
-                    transforms.GaussianBlur(13, sigma=(2.0, 6.0)),
                     transforms.ToTensor(),
                     train_normalize
             ]),
@@ -194,6 +191,7 @@ def get_transforms(norm_path, input_size, train_dir, mc_train_data, multiclass, 
                 train_normalize
             ])
         }
+
 
 
 def calculate_ce_weights(data):
