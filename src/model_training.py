@@ -136,17 +136,18 @@ if __name__ == "__main__":
         mc_val_data = np.array(data["val"], dtype=object)
         mc_test_data = np.array(data["test"], dtype=object)
 
+    class_weights = calculate_ce_weights(np.array(mc_train_data, dtype=object))
+    class_weights = torch.FloatTensor(class_weights).cuda()
+
     if multiclass:
         train_dir = '/media/arnau/SSD/VizWiz/models/multiclass/train/'
         val_dir = '/media/arnau/SSD/VizWiz/models/multiclass/val/'
-        class_weights = calculate_ce_weights(np.array(mc_train_data, dtype=object))
-        class_weights = torch.FloatTensor(class_weights).cuda()
         loss_fn = nn.CrossEntropyLoss(weight=class_weights)
         typ = "MC"
     else:
         train_dir = '/media/arnau/SSD/VizWiz/data/captioning/train/'
         val_dir = '/media/arnau/SSD/VizWiz/data/captioning/val/'
-        loss_fn = nn.BCEWithLogitsLoss()
+        loss_fn = nn.BCEWithLogitsLoss(weight=class_weights)
         typ = str(file.split("_")[1])
 
     # Number of classes in the dataset
@@ -192,7 +193,7 @@ if __name__ == "__main__":
 
     dataloaders_dict = {"train": train_loader, "val": val_loader}
 
-    save_path = f'./outputs/best_{typ}_{model_name}_test.pth'
+    save_path = f'./outputs/best_{typ}_{model_name}.pth'
 
     if not os.path.exists(save_path):
         # Train and evaluate
